@@ -3,7 +3,7 @@ gllc
 
 A *generalized-LL(1) parser combinator* core can be written within 60 lines.
 
-Based on the core, a simple parser for non-LL(1) grammar `S → a a | a S a` can be written as
+Based on this core and with some utilities like `Parser` object added, a simple parser for some non-LL(1) grammar `S → a a | a S a` can be written as
 
 ``` python
 n = Parser()
@@ -19,15 +19,15 @@ n.s = n.a * n.a |\
  ((('a', (('a', ('a', 'a')), 'a')), 'a'), '')]
 ```
 
-Note here
+Things to be noted here
 
-- the combinator operation like `*`, `|` is *binary*,
-- the *recursive* calling for `n.s` is supported by some lazy strategy,
-- namespace is managed by `Parser` object `n` neatly, but also allows further external composition.
+- combinator operations like `*`, `|` are *binary*,
+- the *recursive* access of attribute `n.s` is supported by some *lazy* strategy,
+- parser namespace is managed by object `n` neatly, but also supports further external composition.
 
-This following essay mainly shows some intrinsic relationship between parsing and logical inference, how simple it can be by using them and furthermore, how it is a tiny fun to simulate *laziness* for easy usage.
+This essay mainly talks about some intrinsic relationship between parsing and *logical inference*, how simple an implementation can be due to that and furthermore, how it is a funny trick to simulate *laziness* for easy usage.
 
-# A tiny core for GLL combinator
+# A tiny combinator core
 
 Parser combinators are handy and useful tool to perform ad-hoc parsing work. Among various approaches, the most famous is the Haskell *Parsec* library. However, for the sake of performance, *Parsec* disables the generalized mode by default (see semantics of the operator `<|>` and function `try` in related documentation).
 
@@ -40,16 +40,16 @@ But it is not difficult to construct the *generalized* core from bottom up. Here
 and that's all.
 
 
-## Analogue with logic expressions
+## Analogue of logic expressions
 
-Parsing is no much more than proving by reasoning with AND/OR expressions. For example given the BNF-style grammar rule
+Parsing is no much more than logically proving AND/OR expressions. For example given the BNF-style grammar rule
 
 ```
 S → A B C
   | D
 ```
 
-it means we can either proove **S** after firstly proving **A**, secondly **B** and thirdly **C**, or going another way by singly proving **D**. Any success from the both leads **S** to success. With this analogy, we can treat the grammar like *definite clauses* as
+it means we can either prove **S** after firstly proving **A**, secondly **B** and thirdly **C**, or going another way by singly proving **D**. Any success from the both ways leads **S** to success. With this analogy, we can treat the grammar like *definite clauses* as
 
 ```
 S <= A & B & C
@@ -60,15 +60,15 @@ where `&`, `|`, `<=` mean logical *and*, *or* and *implied-by*. Symbols like **A
 
 ## Input as resource for reasoning
 
-Treating an input string as resource, what parsing has extended itself from logical reasoning is that, proving a goal declaims a prefix of such resource (the *recognized* part) thus delivers a *split*. Subsequent provings can only make use of the *residual* resource.
+Treating an input string as resource, what parsing has extended itself from logical reasoning is that, proving a goal declaims a prefix of such resource (the *recognized* part) thus delivers a *split*. Subsequent provings can only make use of the *residual* resource after splitting.
 
-Note there may be more than one possible ways declaiming splits doing a parsing. A generalized parser thus yields all possible versions of splitting. Here a split is then exactly a *parse result* as a pair, where recognized part may have possibly functioned type other than string:
+Note there may be more than one possible ways declaiming split doing a parsing. A generalized parser thus yields all possible versions of splitting. Here a split is exactly a *parse result* as a pair, where recognized part may have possibly functioned type other than string type:
 
 ``` haskell
 Result : (<recognized-part>, <residual-part>)
 ```
 
-and each parser accepts some input and yield a *sequence* of such results, i.e.
+and each parser, as a function, accepts some input and yield a *sequence* of such results, i.e.
 
 ``` haskell
 Parser : <input> -> Seq Result

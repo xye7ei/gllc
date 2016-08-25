@@ -1,7 +1,9 @@
 gllc
 ===========
 
-A generalized-LL(1) parser combinator *core* can be written within 60 lines. Based on the core, a simple parser for *non-LL(1) grammar* `S → a a | a S a` can be written as
+A *generalized-LL(1) parser combinator* core can be written within 60 lines.
+
+Based on the core, a simple parser for non-LL(1) grammar `S → a a | a S a` can be written as
 
 ``` python
 n = Parser()
@@ -218,7 +220,7 @@ class Seman(PExpr):
             yield func(r), inp1
 ```
 
-It is a binary operation with two operands: a parser `psr` and a function `func`. All it needs is to deliver  functioned results based on the results delivered by the parser. It is also interesting that `Seman` objects can get *nested* (or *chained*). For example, `Seman(Seman(p1, f1), f2)` just *pipelines* the results of `p1` to `f1` then further to `f2`.
+It is a binary operation with two operands: a parser `psr` and a function `func`. All it needs is to deliver  functioned results based on the results delivered by `psr`. It is also interesting that `Seman` objects can get *nested*. For example, `Seman(Seman(p1, f1), f2)` just *pipelines* the results of `p1` to `f1` then further to `f2`.
 
 Since we already overloaded operator `/` for semantics, we can use this like
 
@@ -228,7 +230,7 @@ Since we already overloaded operator `/` for semantics, we can use this like
 ('A', 'c')
 ```
 
-For resulted list, semantics accepting list can be applied similarly:
+Upon any result from `Many`, semantics accepts list as the argument:
 
 ``` python
 >>> p = Token('0') | Token('1')
@@ -305,10 +307,10 @@ Now calling the combinator is no problem:
 
 ## And simpler?
 
-It still seems ugly to write `ctx['S']` stuff. To get rid of this, we finally come to the last resort, i.e. `metaclass`. The class `Grammar` is supposed to be a manager of context and lazy expressions, subtyping `dict`:
+It still seems ugly to write `ctx['S']` stuff. To get rid of this, we finally come to the last resort - overriding some core operations. The class `Parser` is supposed to be a manager of context and lazy expressions, subtyping `dict`:
 
 ```
-class Grammar(dict):
+class Parser(dict):
     def __getattr__(self, k):
         if not k in self:
             return LazyExpr(k, self)
@@ -326,18 +328,18 @@ In short, with the overrider `__getattr__`, any access to an non-existing LHS `k
 Now the `S`-grammar above can be written as
 
 ```
-n = Grammar()
+n = Parser()
 
 a = Token('a')
-n.S = a * a | a * n.S * a
+n.s = a * a | a * n.s * a
 ```
 
-which although seems not totally ideal, but terse enough for practical use.
+which although seems not totally ideal, but concise enough for practical use.
 
 
 # Utilities
 
-To make things easier, we prepare two functions `fst` and `snd` in order to select useful component of a recognized parsing result by an `And` parser (which is a always an 2-tuple).
+To make things easier, we prepare two functions `fst` and `snd` in order to select useful component of any recognized parsing result yielded by an `And` parser (which is a always an 2-tuple).
 
 ``` python
 from operator import itemgetter
@@ -345,10 +347,23 @@ fst = itemgetter(0)
 snd = itemgetter(1)
 ```
 
-Several further utility combinators like these:
+Several further utility combinators like these are often useful:
 
 ``` python
-OneOf = lambda xs: reduce(PExpr.__or__, map(Token, xs))
+class OneOf(PExpr):
+    def __init__(self, alts):
+        self.alts = set(alts)
+    def __call__(self, inp):
+        if inp and inp[0] in self.alts:
+            yield inp[0], inp[1:]
+
+class NoneOf(PExpr):
+    def __init__(self, alts):
+        self.alts = alts
+    def __call__(self, inp):
+        if inp and inp[0] not in self.alts:
+            yield inp[0], inp[1:]
+
 
 White = Many(OneOf(' \t\n'))
 Digit = OneOf('0123456789')
@@ -356,7 +371,7 @@ Alpha = OneOf(map(chr, [*range(65, 91), *range(97, 123)]))
 AlphaNum = Alpha | Digit
 ```
 
-A quite useful operator `**` (see its overriding in `PExpr` class) can help to concatenate a single element with following list delivered by `Many` or `Many1`. For example, a list of integers seperated by comma can be handled with:
+A quite useful operator `**` (see its overloader in `PExpr` class) can help to concatenate a single element with following list delivered by `Many` or `Many1`. For example, a list of integers seperated by comma can be handled with:
 
 ``` python
 Digits = Many(Digit) * White / fst / ''.join
@@ -370,6 +385,13 @@ ints = int1 ** Many(Word(',') * int1 / snd)
 or even more operator sugar with overloading `__rshift__` and `__lshift__` in `PExpr` for underlied application of `fst` and `snd`, meaning *ignoring* a followed or following part:
 
 ``` python
+class PExpr(object):
+    ...
+    def __lshift__(self, other):
+        return Seman(And(self, other), fst)
+    def __rshift__(self, other):
+        return Seman(And(self, other), snd)
+
 Digits = (Many(Digit) << White) / ''.join
 int1 = Digits / int
 ints = int1 ** Many(Word(',') >> int1)

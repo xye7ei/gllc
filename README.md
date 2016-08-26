@@ -6,9 +6,11 @@ A *generalized-LL(1) parser combinator* core can be written within 60 lines.
 Based on this core and with some utilities like `Parser` object added, a simple parser for some non-LL(1) grammar `S → a a | a S a` can be written as
 
 ``` python
-n = Parser()
+import gllc as gl
 
-n.a = Token('a')
+n   = gl.Parser()
+
+n.a = gl.Token('a')
 
 n.s = n.a * n.a |\
       n.a * n.s * n.a
@@ -51,7 +53,7 @@ S → A B C
 
 it means we can either prove **S** after firstly proving **A**, secondly **B** and thirdly **C**, or going another way by singly proving **D**. Any success from the both ways leads **S** to success. With this analogy, we can treat the grammar like *definite clauses* as
 
-```
+``` python
 S <= A & B & C
 S <= D
 ```
@@ -68,7 +70,7 @@ Note there may be more than one possible ways declaiming split doing a parsing. 
 Result : (<recognized-part>, <residual-part>)
 ```
 
-and each parser, as a function, accepts some input and yield a *sequence* of such results, i.e.
+and each parser, as a function, accepts some input and yields a *sequence* of such results, i.e.
 
 ``` haskell
 Parser : <input> -> Seq Result
@@ -212,7 +214,7 @@ Now all combinators to handle most practical grammars get prepared. Some little 
 
 Simply parsing is always not enough - interpretation is necessary in practical work. Based on the concepts above, a semantical combinator is just easy to write:
 
-```
+``` python
 class Seman(PExpr):
     def __call__(self, inp):
         psr, func = self.subs
@@ -309,7 +311,7 @@ Now calling the combinator is no problem:
 
 It still seems ugly to write `ctx['S']` stuff. To get rid of this, we finally come to the last resort - overriding some core operations. The class `Parser` is supposed to be a manager of context and lazy expressions, subtyping `dict`:
 
-```
+``` python
 class Parser(dict):
     def __getattr__(self, k):
         if not k in self:
@@ -327,7 +329,7 @@ In short, with the overrider `__getattr__`, any access to an non-existing LHS `k
 
 Now the `S`-grammar above can be written as
 
-```
+``` python
 n = Parser()
 
 a = Token('a')

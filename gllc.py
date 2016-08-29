@@ -13,6 +13,8 @@ class PExpr(object):
         return Seman(And(self, other), lambda tp: tp[0])
     def __rshift__(self, other):
         return Seman(And(self, other), lambda tp: tp[1])
+    __and__ = __truediv__
+    __xor__ = __truediv__
 
 class Token(PExpr):
     def __call__(self, inp):
@@ -107,9 +109,6 @@ def Word(lit):
 
 assert(list(Word('abc')('abc   de'))) == [('abc', 'de')]
 
-
-Digit = reduce(PExpr.__or__, map(Token, '0123456789'))
-
 class OneOf(PExpr):
     def __init__(self, alts):
         self.alts = set(alts)
@@ -128,6 +127,7 @@ from operator import or_
 # OneOf = lambda xs: reduce(or_, map(Token, xs))
 White = Many(OneOf(' \t\n'))
 Digit = OneOf('0123456789')
+Digit1_9 = OneOf('123456789')
 Alpha = OneOf(map(chr, [*range(65, 91), *range(97, 123)]))
 
 # print(list(White('    \n \vgg')))
@@ -175,6 +175,27 @@ class Parser(dict):
             self[k] = v
         else:
             self[k] |= v
+
+class Parser(object):
+    """Version with better encapsulation - no built-in method exposed."""
+    def __init__(self):
+        self._d = {}
+    def __getattr__(self, k):
+        if k in dir(self):
+            return object.__getattribute__(self, k)
+        else:
+            d = self._d
+            if k not in d:
+                return LazyExpr(k, d)
+            else:
+                return d[k]
+    def __setattr__(self, k, v):
+        if k.startswith('_'):
+            object.__setattr__(self, k, v)
+        else:
+            d = self._d
+            if k not in d: d[k] = v
+            else: d[k] |= v
 
 def gll(func):
     return func(Parser())

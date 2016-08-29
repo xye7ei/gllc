@@ -228,7 +228,7 @@ Since we already overloaded operator `/` for semantics, we can use this like
 
 ```python
 >>> r = Token('a') / str.upper
->>> print(next(r('ac')))
+>>> next(r('ac'))
 ('A', 'c')
 ```
 
@@ -237,7 +237,7 @@ Upon any result from `Many`, semantics accepts list as the argument:
 ``` python
 >>> p = Token('0') | Token('1')
 >>> r = Many(p / int) / (lambda xs: [x for x in xs if x > 0])
->>> print(next(r('101012')))
+>>> next(r('101012'))
 ([1, 1, 1], '2')
 ```
 
@@ -298,10 +298,10 @@ S = ctx['S'] = a * a |\
 
 Now calling the combinator is no problem:
 ```
->>> print(list(S('aa')))
+>>> list(S('aa'))
 [(('a', 'a'), '')]
 
->>> print(list(S('aaaaaa')))
+>>> list(S('aaaaaa'))
 [(('a', 'a'), 'aaaa'),
  ((('a', ('a', 'a')), 'a'), 'aa'),
  ((('a', (('a', ('a', 'a')), 'a')), 'a'), '')]

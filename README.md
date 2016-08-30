@@ -21,13 +21,14 @@ n.s = n.a * n.a |\
  ((('a', (('a', ('a', 'a')), 'a')), 'a'), '')]
 ```
 
-Things to be noted here
+Things to be noted here:
 
-- combinator operations like `*`, `|` are *binary*,
-- the *recursive* access of attribute `n.s` is supported by some *lazy* strategy,
-- parser namespace is managed by object `n` neatly, but also supports further external composition.
+- The *recursive* access of attribute `n.s` is supported by some *lazy* strategy,
+- Combinator operations like `*`, `|` are *binary* and *left assoctative*.
+- Parser namespace is managed by object `n` neatly, but also supports further external composition.
+- Generalized parser fundamentally delivers all *partial* parses, where ambiguity is not ruled out.
 
-This essay mainly talks about some intrinsic relationship between parsing and *logical inference*, how simple an implementation can be due to that and furthermore, how it is a funny trick to simulate *laziness* for easy usage.
+This essay mainly talks about some intrinsic relationship between parsing and *logical inference*, how simple an implementation can be using coroutines due to that and furthermore, how it is a funny trick to simulate *laziness* for easy usage.
 
 # A tiny combinator core
 
@@ -122,7 +123,7 @@ In the parsing context such a pause- and continuable process is treated as a res
 
 ## Implementation
 
-The very first definition is the most fundemantal `PExpr`, i.e. the *parser expression*. It is an *abstract class* supporting *AND* and *OR* operations, which are simulated by operation `*` and `|`. The */* and *\*\** operators for semantic application would be explained later on. The shared constructor with sub-expression arguments is for simplicity.
+The very first definition is the most fundemantal `PExpr`, i.e. the *parser expression*. It is an *abstract class* supporting *AND* and *OR* operations, which are simulated by operation `__mul__` and `__or__`. The `__truediv__` and `__pow__` operators for semantic applications (reasons for these choices would be explained later on). The shared constructor with sub-expression arguments is for simplicity.
 
 Each subtype of `PExpr` should support `__call__` method as virtual `def parse(inp): ...` method accepting input string as its argument and yield possible results.
 
@@ -153,6 +154,8 @@ class Token(PExpr):
 ```
 
 The `And` expression extending `PExpr` having left and right operands, namely `psr1` and `psr2` and comprises a new parser. It calls parsing by its operands recursively, where the results of `psr2` is derived from results of `psr1`. A detail here is that the Python `*` operator is left-associate (like most oeprators) so that the left sub-expression of `And` may itself be an `And`. Thus the resulted tuple `(r1, r2)` has `r1` as a nested tuple within chained `And` expressions.
+
+The rationale for choosing `__mul__` for *And* operation lies here: `tuple` is treated as *product* type in theory contexts (cf. [Algebraic Data Type](https://en.wikipedia.org/wiki/Algebraic_data_type)).
 
 ``` python
 class And(PExpr):
@@ -210,7 +213,7 @@ Now all combinators to handle most practical grammars get prepared. Some little 
 (['b', 'a', 'b', 'b', 'a'], 'c')
 ```
 
-## And the meanings?
+## About the meaning
 
 Simply parsing is always not enough - interpretation is necessary in practical work. Based on the concepts above, a semantical combinator is just easy to write:
 
@@ -224,7 +227,7 @@ class Seman(PExpr):
 
 It is a binary operation with two operands: a parser `psr` and a function `func`. All it needs is to deliver  functioned results based on the results delivered by `psr`. It is also interesting that `Seman` objects can get *nested*. For example, `Seman(Seman(p1, f1), f2)` just *pipelines* the results of `p1` to `f1` then further to `f2`.
 
-Since we already overloaded operator `/` for semantics, we can use this like
+Since we already overloaded operator `__truediv__` for semantics (`/` is chosen since product type `tuple` may get *divided* into unary parts and get handled somehow), we can use this like:
 
 ```python
 >>> r = Token('a') / str.upper
@@ -232,7 +235,7 @@ Since we already overloaded operator `/` for semantics, we can use this like
 ('A', 'c')
 ```
 
-Upon any result from `Many`, semantics accepts list as the argument:
+In case handling result from `Many`, semantical function accepts a list as its argument:
 
 ``` python
 >>> p = Token('0') | Token('1')
@@ -260,7 +263,7 @@ S = a * a |\
     a * S * a
 ```
 
-since `S` needs to be evaluated in the right hand side sub-expression `a * S * a` before it gets defined. To allow construction by instantiating before evaluation by calling, one approach is to use the `lambda` structure for lazy look-up of `S`:
+since `S` needs to be evaluated in the right hand side sub-expression `a * S * a` before it gets defined. To allow construction by instantiating before evaluation by calling, one approach is to use the `lambda` structure for lazy look-up of `S` in the `globals` environment:
 
 ``` python
 a = Token('a')
@@ -325,7 +328,7 @@ class Parser(dict):
             self[k] |= v
 ```
 
-In short, with the overrider `__getattr__`, any access to an non-existing LHS `k` as an attribute creates a lazy expression given a symbol `k`. With `__setattr__` a symbol `k` gets bound to a `RHS` expression (or augments the existing expression as an `Or` expression).
+In short, with the overrider `__getattr__`, any access to an non-existing left-hand-side symbol `k` as an attribute creates a lazy expression given a symbol `k`. With `__setattr__` a symbol `k` gets bound to a right-hand-side expression (or augments the existing expression as an `Or` expression).
 
 Now the `S`-grammar above can be written as
 
@@ -341,7 +344,7 @@ which although seems not totally ideal, but concise enough for practical use.
 
 # Utilities
 
-To make things easier, we prepare two functions `fst` and `snd` in order to select useful component of any recognized parsing result yielded by an `And` parser (which is a always an 2-tuple).
+To make ad-hoc things easier, we prepare two functions `fst` and `snd` in order to select useful component of any recognized parsing result yielded by an `And` parser (which is a always an 2-tuple).
 
 ``` python
 from operator import itemgetter

@@ -229,3 +229,8 @@ print(aSa('a aa  a  a'))
 print(aSa('a a a  a a  a'))
 print(aSa('a a     a a   a a  a'))
 print(aSa('a a a a  a   a a  a'))
+
+# S1('a') = FAIL
+# S2('aa') = (aa, '')
+# S3('aaa') = S2('aaa') = (aa, 'a')
+# S4('aaaa') = S3('aaaa') = S2('aaaa') = 

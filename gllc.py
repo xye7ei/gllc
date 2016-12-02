@@ -5,6 +5,8 @@ class PExpr(object):
         return And(self, other)
     def __or__(self, other):
         return Or(self, other)
+    def __xor__(self, other):
+        return Or1(self, other)
     def __truediv__(self, f):
         return Seman(self, f)
     def __pow__(self, other):
@@ -14,7 +16,7 @@ class PExpr(object):
     def __rshift__(self, other):
         return Seman(And(self, other), lambda tp: tp[1])
     __and__ = __truediv__
-    __xor__ = __truediv__
+    # __xor__ = __truediv__
 
 class Token(PExpr):
     def __call__(self, inp):
@@ -33,6 +35,14 @@ class Or(PExpr):
     def __call__(self, inp):
         for psr in self.subs:
             yield from psr(inp)
+
+class Or1(PExpr):
+    def __call__(self, inp):
+        for psr in self.subs:
+            r = list(psr(inp))
+            if r:
+                yield from r
+                break
 
 class Many(PExpr):
     def __call__(self, inp):
@@ -61,10 +71,6 @@ class Seman(PExpr):
         for r, inp1 in psr(inp):
             yield func(r), inp1
 
-# # For `Seman.__call__`:
-# `r` may or may not be a tuple (may be already some
-# semantic result)!  So deconstructing tuple should not
-# happen here.
 
 class Opt(PExpr):
     def __call__(self, inp):
@@ -81,6 +87,7 @@ class Full(PExpr):
         for r, inp1 in psr(inp):
             if not inp1:
                 yield r
+
 
 import re
 

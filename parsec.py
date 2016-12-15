@@ -108,6 +108,7 @@ whitespace = alt([
     token(' '),
     token('\t'),
     token('\n'),
+    token('\v'),
     token('\r'),
 ])
 # Multiple whitespaces

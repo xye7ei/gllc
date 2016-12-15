@@ -1,25 +1,3 @@
-from collections import namedtuple, deque
-
-
-class Cons(namedtuple('Cons', 'car cdr')):
-
-    def to_deque(self):
-        q = deque()
-        c = self
-        while c is not Nil:
-            q.appendleft(c.car)
-            c = c.cdr
-        return q
-
-
-class _Nil(Cons):
-
-    def to_deque(self):
-        return deque()
-
-Nil = _Nil(None, None)
-
-
 class PExpr(object):
     def __init__(self, *subs):
         self.subs = subs
@@ -37,14 +15,14 @@ class PExpr(object):
         return Seman(And(self, other), lambda tp: tp[0])
     def __rshift__(self, other):
         return Seman(And(self, other), lambda tp: tp[1])
-
+    __and__ = __truediv__
+    # __xor__ = __truediv__
 
 class Token(PExpr):
     def __call__(self, inp):
         lit, = self.subs
         if inp.startswith(lit):
             yield lit, inp[len(lit):]
-
 
 class And(PExpr):
     def __call__(self, inp):
@@ -74,28 +52,10 @@ class Many(PExpr):
             agd1 = []
             for rs, inp in agd:
                 for r1, inp1 in psr(inp):
-                    # agd1.append((rs+[r1], inp1))
-                    agd1.append(([*rs, r1], inp1))
+                    agd1.append((rs+[r1], inp1))
             if agd1: agd = agd1
             else: break
         yield from agd
-
-# # Using custom CONS cannot enhance performance (worse).
-# class Many(PExpr):
-#     def __call__(self, inp):
-#         psr, = self.subs
-#         agd = [(Nil, inp)]
-#         while 1:
-#             agd1 = []
-#             for rs, inp in agd:
-#                 for r1, inp1 in psr(inp):
-#                     agd1.append((Cons(r1, rs), inp1))
-#             if agd1:
-#                 agd = agd1
-#             else:
-#                 break
-#         for cons, inp1 in agd:
-#             yield cons.to_deque(), inp1
 
 class Many1(PExpr):
     def __call__(self, inp):
@@ -147,10 +107,9 @@ from operator import itemgetter
 fst = itemgetter(0)
 snd = itemgetter(1)
 
-White = Many(Token(' ') | Token('\t') | Token('\n') | Token('\v') | Token('\r'))
+White = Many(Token(' ') | Token('\t') | Token('\n') | Token('\v'))
 
-assert(list(next(White('   \n  \v b'))[0])) == [' ', ' ', ' ', '\n', ' ', ' ', '\v', ' '], \
-    list(next(White('   \n  \v b')))
+assert(list(White('   \n  \v b'))) == [([' ', ' ', ' ', '\n', ' ', ' ', '\v', ' '], 'b')]
 
 def Word(lit):
     return Token(lit) * White / fst

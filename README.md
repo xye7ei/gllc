@@ -316,11 +316,10 @@ It still seems ugly to write `ctx['S']` stuff. To get rid of this, we finally co
 
 ``` python
 class Parser(dict):
+
     def __getattr__(self, k):
-        if not k in self:
-            return LazyExpr(k, self)
-        else:
-            return self[k]
+        return LazyExpr(k, self)
+
     def __setattr__(self, k, v):
         if k not in self:
             self[k] = v
@@ -339,7 +338,7 @@ a = Token('a')
 n.s = a * a | a * n.s * a
 ```
 
-which although seems not totally ideal, but concise enough for practical use.
+which although seems not totally ideal, but concise enough for practical use. More interesting here is that, `Parser` provides some policy of managing combinators within some namespaces (i.e. modularity), which can help a lot for the scalability of functionalities.
 
 
 # Utilities

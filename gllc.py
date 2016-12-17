@@ -188,62 +188,30 @@ Alpha = OneOf(map(chr, [*range(65, 91), *range(97, 123)]))
 # =========================
 
 class LazyExpr(PExpr):
+
     def __init__(self, name, context):
         self.name = name
         self.context = context
+
     def __repr__(self):
         return '-{}-'.format(self.name)
+
     def __call__(self, *args):
         return self.context[self.name](*args)
 
-# a = Token('a')
-# S = lambda inp: \
-#     (a * a | a * S * a)(inp)
-# 
-# ctx = {}
-# a = Token('a')
-# S = LazyExpr('S', ctx)
-# 
-# S = ctx['S'] = a * a |\
-#                a * S * a
-# 
-# from pprint import pprint
-# pprint(list(S('aa')))
-# pprint(list(S('aaaaaa')))
-# assert 0
 
 class Parser(dict):
+
     def __getattr__(self, k):
-        if not k in self:
-            return LazyExpr(k, self)
-        else:
-            return self[k]
+        """Any usage of any combinator is lazy by default."""
+        return LazyExpr(k, self)
+
     def __setattr__(self, k, v):
         if k not in self:
             self[k] = v
         else:
             self[k] |= v
 
-class Parser(object):
-    """Version with better encapsulation - no built-in method exposed."""
-    def __init__(self):
-        self._d = {}
-    def __getattr__(self, k):
-        if k in dir(self):
-            return object.__getattribute__(self, k)
-        else:
-            d = self._d
-            if k not in d:
-                return LazyExpr(k, d)
-            else:
-                return d[k]
-    def __setattr__(self, k, v):
-        if k.startswith('_'):
-            object.__setattr__(self, k, v)
-        else:
-            d = self._d
-            if k not in d: d[k] = v
-            else: d[k] |= v
 
 def gll(func):
     return func(Parser())

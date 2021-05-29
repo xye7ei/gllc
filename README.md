@@ -3,7 +3,7 @@ gllc
 
 A *generalized-LL(1) parser combinator* core can be written within 60 lines.
 
-Based on this core and with some utilities like `Parser` object added, a simple parser for some non-LL(1) grammar `S → a a | a S a` can be written as
+Based on the core and additional helper object `Parser`, a simple parser for the examplar non-LL(1) grammar `S → a a | a S a` can be defined as
 
 ``` python
 import gllc as gl
@@ -21,63 +21,63 @@ n.s = n.a * n.a |\
  ((('a', (('a', ('a', 'a')), 'a')), 'a'), '')]
 ```
 
-Things to be noted here:
+A few points here:
 
-- The *recursive* access of attribute `n.s` is supported by some *lazy* strategy,
-- Combinator operations like `*`, `|` are *binary* and *left assoctative*.
-- Parser namespace is managed by object `n` neatly, but also supports further external composition.
-- Generalized parser fundamentally delivers all *partial* parses, where ambiguity is not ruled out.
+- The *recursive* access to the attribute `n.s` is supported by a *lazy* strategy,
+- Combinator operations like `*`, `|` are *binary* and *left associative*.
+- Parser namespace is managed by the object `n` pretty neatly. You can even combine parsers from different namespaces.
+- Generalized parser normally delivers all *partial* parses i.e. ambiguous results.
 
-This essay mainly talks about some intrinsic relationship between parsing and *logical inference*, how simple an implementation can be using coroutines due to that and furthermore, how it is a funny trick to simulate *laziness* for easy usage.
+This README mainly talks about the intrinsic relationship between parsing and *logical inference*, and how simple it is to use coroutines for the implementation. It also shows an interesting trick to simulate the *laziness* to make the parser support recursive symbols.
 
 # A tiny combinator core
 
-Parser combinators are handy and useful tool to perform ad-hoc parsing work. Among various approaches, the most famous is the Haskell *Parsec* library. However, for the sake of performance, *Parsec* disables the generalized mode by default (see semantics of the operator `<|>` and function `try` in related documentation).
+Parser combinators are handy tools to do ad-hoc parsing work. The most famous library for that is the Haskell *Parsec* library. However, *Parsec* disables the generalized mode by default (see semantics of the operator `<|>` and function `try` in related documentation), which means the user need to do extensive left-factoring work to get the grammar working. This could lead to the loss of intuition supporting the grammar design (sometimes we just want to play with the grammar tolerating some level of ambiguity).
 
-But it is not difficult to construct the *generalized* core from bottom up. Here *Python* is chosen for a terse implementation due to the interesting features:
+However, it is not uneasy to build a *generalized* parsing core from scratch. Here we use *Python* for a concise implementation benefitting from the interesting features:
 
 * generator
 * operator overriding
-* possible laziness
+* lazy access to object attributes
 
 and that's all.
 
 
 ## Analogue of logic expressions
 
-Parsing is no much more than logically proving AND/OR expressions. For example given the BNF-style grammar rule
+Parsing is no much different than proving logical expressions like AND/OR. For example with the BNF-style grammar
 
 ```
 S → A B C
   | D
 ```
 
-it means we can either prove **S** after firstly proving **A**, secondly **B** and thirdly **C**, or going another way by singly proving **D**. Any success from the both ways leads **S** to success. With this analogy, we can treat the grammar like *definite clauses* as
+it means we can either prove **S** after proving **A** first, then **B** and finally **C**, or go another way by just proving **D**. Any success from the both ways means **S** is proved. Analogically, we can see the grammar as *definite clauses* like the following
 
 ``` python
 S <= A & B & C
 S <= D
 ```
 
-where `&`, `|`, `<=` mean logical *and*, *or* and *implied-by*. Symbols like **A**, **B** and etc. are treated as *goal*s of logical inference. By the way, any symbol such as **A**, **B** etc. can be terminal/atomic like a logical *literal*, which can be tested directly if it matches the truth.
+where `&`, `|`, `<=` mean logical *and*, *or* and *implied-by*. Symbols like **A**, **B** and etc. are seen as *goal*s of logical inference. By the way, any symbol such as **A**, **B** etc. can be terminal/atomic like a logical *literal*, which can be tested directly for its trueness.
 
 ## Input as resource for reasoning
 
-Treating an input string as resource, what parsing has extended itself from logical reasoning is that, proving a goal declaims a prefix of such resource (the *recognized* part) thus delivers a *split*. Subsequent provings can only make use of the *residual* resource after splitting.
+We see an input string as resource. What parsing goes further from logical reasoning is that, proving a goal "declaims" (i.e. consumes) a prefix of the resource (the *recognized* part) thus delivers a *split*. Subsequent provings can only make use of the *residual* resource after splitting.
 
-Note there may be more than one possible ways declaiming split doing a parsing. A generalized parser thus yields all possible versions of splitting. Here a split is exactly a *parse result* as a pair, where recognized part may have possibly functioned type other than string type:
+Note there may be more than one possible ways of declaiming for splits. A generalized parser should yields all possible splittings. A split is then exactly a *parse result* as a pair, where the recognized part may have been tranformed (consumed as) a different type other than the string type:
 
 ``` haskell
 Result : (<recognized-part>, <residual-part>)
 ```
 
-and each parser, as a function, accepts some input and yields a *sequence* of such results, i.e.
+and each parser, as a function, accepts an input string and yields a *sequence* of results, i.e.
 
 ``` haskell
 Parser : <input> -> Seq Result
 ```
 
-and empty sequence when no success.
+and empty sequence if there are no successful splitting at all.
 
 <!--
 With some formularization of all above, we have 3 most fundamental parsing cases given a start input string
@@ -123,9 +123,9 @@ In the parsing context such a pause- and continuable process is treated as a res
 
 ## Implementation
 
-The very first definition is the most fundemantal `PExpr`, i.e. the *parser expression*. It is an *abstract class* supporting *AND* and *OR* operations, which are simulated by operation `__mul__` and `__or__`. The `__truediv__` and `__pow__` operators for semantic applications (reasons for these choices would be explained later on). The shared constructor with sub-expression arguments is for simplicity.
+Based on the brief theory above, we can start thinking about the implementation. The very first object definition would be the most fundemantal `PExpr`, i.e. the *parser expression*. It can be defined as an *abstract class* supporting *AND* and *OR* operations as explained in the previous section (which are simulated by operation `__mul__` and `__or__`). The `__truediv__` and `__pow__` operators are used for semantic applications (reasons for these choices will be explained later). The constructor accepts sub-expression arguments which are the operands of the expression.
 
-Each subtype of `PExpr` should support `__call__` method as virtual `def parse(inp): ...` method accepting input string as its argument and yield possible results.
+Each subtype of `PExpr` can support the `__call__` method which accepts input strings and yield parsing results.
 
 ``` python
 class PExpr(object):
@@ -143,7 +143,7 @@ class PExpr(object):
         raise NotImplemented
 ```
 
-The `Token` parser tries to match the prefix of the input and yield nothing when matching failed.
+The `Token` parser is our first concret parser. It tries to match the prefix of the input and yields a split, or yields nothing when matching failed.
 
 ``` python
 class Token(PExpr):
@@ -153,9 +153,9 @@ class Token(PExpr):
             yield lit, inp[len(lit):]
 ```
 
-The `And` expression extending `PExpr` having left and right operands, namely `psr1` and `psr2` and comprises a new parser. It calls parsing by its operands recursively, where the results of `psr2` is derived from results of `psr1`. A detail here is that the Python `*` operator is left-associate (like most oeprators) so that the left sub-expression of `And` may itself be an `And`. Thus the resulted tuple `(r1, r2)` has `r1` as a nested tuple within chained `And` expressions.
+The `And` expression extending `PExpr` having its left and right operands, namely `psr1` and `psr2` and `And` now defines a new parser. It calls the parsing method of its operands recursively, where the results of `psr2` is computed based on the results of `psr1`. One detail here is that the Python `*` operator is left-associative (like most oeprators) so that the left sub-expression of `And` may itself be an `And`. Thus the resulted tuple `(r1, r2)` has `r1` as a nested tuple within chained `And` expressions.
 
-The rationale for choosing `__mul__` for *And* operation lies here: `tuple` is treated as *product* type in theory contexts (cf. [Algebraic Data Type](https://en.wikipedia.org/wiki/Algebraic_data_type)).
+The reason for choosing `__mul__` to represent the *And* operation is that, `tuple` is treated as *product* type in relevant theories (cf. [Algebraic Data Type](https://en.wikipedia.org/wiki/Algebraic_data_type)).
 
 ``` python
 class And(PExpr):
@@ -166,7 +166,7 @@ class And(PExpr):
                 yield (r1, r2), inp2
 ```
 
-For the `Or` expression, parsing yield results from its every operands independently. High potential of parallelism show up here.
+For the `Or` expression, the parsing yields results from both its operands, and results from either branch don't depend on the other branch. You can even think about submitting the parsing task of each operands to a parallel execution context.
 
 ``` python
 class Or(PExpr):
@@ -175,8 +175,8 @@ class Or(PExpr):
             yield from psr(inp)
 ```
 
-Then we need the hilarious *Kleene-closure* combinator, which can be implemented in iterative manner.
-After starting parsing it bookkeeps an *agenda* of feasible results so far and tries finding updates for the agenda with possible parsings. Once nothing found, it yields all results in the agenda. This is an *eager* matching scheme.
+Then we need the very famous *Kleene-closure* combinator, which can be implemented using a loop.
+From the beginning on, the parsing prepares an *agenda* for tracking feasible results. In each iteration, it checks the agenda containing feasible splits, and tries to make new splits by consuming another sequence of input. Once no new splits are found, it yields all results in the agenda. This is an *eager* matching scheme since with "Many" it means "consuming as much resource as possible to accumulate valid parsing splits".
 
 ``` python
 class Many(PExpr):
@@ -193,7 +193,7 @@ class Many(PExpr):
         yield from agd
 ```
 
-Based on this, `Many1` is for a sequence having at least one parsings.
+For convenience, we can define `Many1` which means repetitive parsing of the `PExpr` should have at least one split set found.
 
 ``` python
 class Many1(PExpr):
@@ -205,7 +205,7 @@ class Many1(PExpr):
                 yield [r] + rs, inp2
 ```
 
-Now all combinators to handle most practical grammars get prepared. Some little playing shows the ease of usage.
+Now we already have all combinators to handle grammars in most cases. You can play with the parsers already:
 
 ``` python
 >>> ab = Many(Token('a') | Token('b'))
@@ -213,9 +213,9 @@ Now all combinators to handle most practical grammars get prepared. Some little 
 (['b', 'a', 'b', 'b', 'a'], 'c')
 ```
 
-## About the meaning
+## About the semantics
 
-Simply parsing is always not enough - interpretation is necessary in practical work. Based on the concepts above, a semantical combinator is just easy to write:
+Simply parsing is always not enough - interpretation is almost always necessary when working with practical data transformation. Now we easily define the `Seman` expression to indicate interpretation:
 
 ``` python
 class Seman(PExpr):
@@ -225,9 +225,9 @@ class Seman(PExpr):
             yield func(r), inp1
 ```
 
-It is a binary operation with two operands: a parser `psr` and a function `func`. All it needs is to deliver  functioned results based on the results delivered by `psr`. It is also interesting that `Seman` objects can get *nested*. For example, `Seman(Seman(p1, f1), f2)` just *pipelines* the results of `p1` to `f1` then further to `f2`.
+It is a binary operation with two operands: a parser `psr` and a function `func`. All it needs is to deliver functioned results based on the results delivered by `psr`. It is also interesting that `Seman` objects can be *nested*. For example, `Seman(Seman(p1, f1), f2)` just *pipelines* the results of `p1` to `f1` then further to `f2`.
 
-Since we already overloaded operator `__truediv__` for semantics (`/` is chosen since product type `tuple` may get *divided* into unary parts and get handled somehow), we can use this like:
+Since we already overloaded operator `__truediv__` for interpretation (`/` is chosen since product type `tuple` may get *divided* into unary parts and get handled somehow), we can use it like:
 
 ```python
 >>> r = Token('a') / str.upper
@@ -235,7 +235,7 @@ Since we already overloaded operator `__truediv__` for semantics (`/` is chosen 
 ('A', 'c')
 ```
 
-In case handling result from `Many`, semantical function accepts a list as its argument:
+In case of handling results from `Many`, the semantic function accepts a list as its argument:
 
 ``` python
 >>> p = Token('0') | Token('1')
@@ -244,9 +244,9 @@ In case handling result from `Many`, semantical function accepts a list as its a
 ([1, 1, 1], '2')
 ```
 
-# How lazy?
+# How to be lazy?
 
-One severe problem for using combinators pracically is that most language are *strict* when constructing data structures, that is, every argument for a operation must be evaluated before evaluating the operation.
+One big problem of using combinators in practice is that most languages are *strict* when constructing data structures, that is, every argument for a operation must be evaluated before evaluating the operation itself.
 
 For example, given the grammar:
 ```
@@ -263,7 +263,9 @@ S = a * a |\
     a * S * a
 ```
 
-since `S` needs to be evaluated in the right hand side sub-expression `a * S * a` before it gets defined. To allow construction by instantiating before evaluation by calling, one approach is to use the `lambda` structure for lazy look-up of `S` in the `globals` environment:
+since `S` needs to be evaluated on the right hand side sub-expression `a * S * a` before it is actually defined. In a lazy language like Haskell, this won't be a problem since the evaluation does not happen when contructing an expression.
+
+But we don't want to lose our concise way of representing the grammar. One approach is to use the `lambda` structure for lazy look-up of `S` in the `globals` environment:
 
 ``` python
 a = Token('a')
@@ -271,11 +273,13 @@ S = lambda inp: \
     (a * a | a * S * a)(inp)
 ```
 
-which seems a little cumbersome to repeatly type `lambda` and `inp`. But we have a another trick for somewhat better neatness.
+which works but it is for sure annoying to repeatly type `lambda inp:` when playing with your funny language.
 
-### Some lazy object
+Here we have several possible tricks.
 
-Firstly we define the `LazyExpr` class. An lazy expression is defined given a corresponding *context* (aka. *namespace* as well as *environment*), which is prepared in advance.
+### A lazy object
+
+First we define the `LazyExpr` class. An lazy expression is defined in a given *context* (aka. *namespace* as well as *environment*), which is prepared in advance.
 
 ``` python
 class LazyExpr(PExpr):
@@ -286,7 +290,7 @@ class LazyExpr(PExpr):
         return self.context[self.name](*args)
 ```
 
-Note such expression is logically also subtype of `PExpr` and is callable. Now the grammar above can be written as
+Note such expression is logically also a subtype of `PExpr` and is callable. Now the grammar above can be written as
 
 ``` python
 # Preparing context and construct
@@ -299,7 +303,7 @@ S = ctx['S'] = a * a |\
                a * S * a
 ```
 
-Now calling the combinator is no problem:
+Now calling the combinator seems neater:
 ```
 >>> list(S('aa'))
 [(('a', 'a'), '')]
@@ -310,9 +314,9 @@ Now calling the combinator is no problem:
  ((('a', (('a', ('a', 'a')), 'a')), 'a'), '')]
 ```
 
-## And simpler?
+## And even simpler?
 
-It still seems ugly to write `ctx['S']` stuff. To get rid of this, we finally come to the last resort - overriding some core operations. The class `Parser` is supposed to be a manager of context and lazy expressions, subtyping `dict`:
+It still seems annoying to always write the `ctx['S']` stuff. To get rid of this, we finally come to the last resort - overriding built-in operations. The class `Parser` is supposed to be a manager of the context of the lazy expressions, subtyping `dict`:
 
 ``` python
 class Parser(dict):
@@ -327,7 +331,7 @@ class Parser(dict):
             self[k] |= v
 ```
 
-In short, with the overrider `__getattr__`, any access to an non-existing left-hand-side symbol `k` as an attribute creates a lazy expression given a symbol `k`. With `__setattr__` a symbol `k` gets bound to a right-hand-side expression (or augments the existing expression as an `Or` expression).
+In short, with the overrider `__getattr__`, any access to an non-existing left-hand-side symbol `k` as an attribute leads to the creation of a lazy expression given a symbol `k`. With `__setattr__` a symbol `k` is bound to a right-hand-side expression (or augments the existing expression via an `Or` expression).
 
 Now the `S`-grammar above can be written as
 
@@ -338,7 +342,7 @@ a = Token('a')
 n.s = a * a | a * n.s * a
 ```
 
-which although seems not totally ideal, but concise enough for practical use. More interesting here is that, `Parser` provides some policy of managing combinators within some namespaces (i.e. modularity), which can help a lot for the scalability of functionalities.
+which although seems not super ideal, but concise enough for practical use. More interesting here is, `Parser` provides extra policy of managing combinators within some namespaces, which can be potentially useful if you think about defining different grammars in separate modules and combining them together for use. Say you have a parser `n` and a parser `m`, you can now define a parser like `my_parser = n.s * m.t * n.w`.
 
 
 # Utilities
@@ -351,7 +355,7 @@ fst = itemgetter(0)
 snd = itemgetter(1)
 ```
 
-Several further utility combinators like these are often useful:
+Utility combinators like the following can be useful too:
 
 ``` python
 class OneOf(PExpr):
@@ -375,7 +379,7 @@ Alpha = OneOf(map(chr, [*range(65, 91), *range(97, 123)]))
 AlphaNum = Alpha | Digit
 ```
 
-A quite useful operator `**` (see its overloader in `PExpr` class) can help to concatenate a single element with following list delivered by `Many` or `Many1`. For example, a list of integers seperated by comma can be handled with:
+A quite useful operator `**` (see its overloader in `PExpr` class) can help with concatenating a single element with a following list delivered by `Many` or `Many1`. For example, a list of integers seperated by comma can be handled like:
 
 ``` python
 Digits = Many(Digit) * White / fst / ''.join
@@ -386,7 +390,7 @@ ints = int1 ** Many(Word(',') * int1 / snd)
 ([123, 45, 987], '')
 ```
 
-or even more operator sugar with overloading `__rshift__` and `__lshift__` in `PExpr` for underlied application of `fst` and `snd`, meaning *ignoring* a followed or following part:
+Even more operator sugar can be provided via overloading `__rshift__` and `__lshift__` in `PExpr` based on `fst` and `snd`, meaning *ignoring* a followed or following part:
 
 ``` python
 class PExpr(object):
@@ -423,18 +427,16 @@ e.factor = e.number |\
 e.number = (Many1(Digit) << White) / ''.join / int
 ```
 
-The rest of work for practical use requires only more combinated utilities based on things above.
+And that's all. The user can extend the parsers with whatever new combinator according to the needs.
 
 
 # TODO
 
-There is potential optimizations for performance and memory usage. For example
+There are potential improvements considering performance and memory usage. For example
 
 + Use indices rather than making string slices to represent residual inputs.
 + Use *Graph Structured Stack* or *CONS* to avoid copying lists when parsing with `Many`, `Many1`.
 + Augment the `Result` structure with *Left/Right* structure to report error messages.
 + Make process tracing possible.
-+ Make some predictive/non-consuming combinators (starting from `<<` and `>>`).
-+ Consider possibilities for these *binary* combinators.
-+ Left recursion.
-
++ Make predictive/non-consuming combinators (starting from `<<` and `>>`).
++ Detect left recursion.
